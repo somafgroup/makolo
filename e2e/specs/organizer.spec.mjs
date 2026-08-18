@@ -23,12 +23,12 @@ test('owner creates a complete event, publishes it and configures ticketing', as
 
   await expect(page.getByRole('heading', { name: 'Conférence Organisateur E2E', exact: true })).toBeVisible();
   await expect(page.getByText('Brouillon', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Gérer' }).click();
+  await page.getByRole('button', { name: 'Gérer', exact: true }).click();
   await page.getByRole('button', { name: 'Publier' }).click();
   await expect(page.getByText(/Événement publié/i)).toBeVisible();
   await expect(page.getByText('Publié', { exact: true })).toBeVisible();
 
-  await page.getByRole('button', { name: 'Gérer' }).click();
+  await page.getByRole('button', { name: 'Gérer', exact: true }).click();
   await page.getByRole('link', { name: /Configurer la billetterie/i }).click();
   await page.getByRole('link', { name: 'Nouveau type' }).click();
   await page.getByLabel('Événement').selectOption({ label: 'Conférence Organisateur E2E' });
@@ -78,12 +78,9 @@ test('space owner creates a reusable place and another space owner is isolated',
   const placeHeading = page.getByRole('heading', { name: 'Agence Centre-ville', exact: true });
   await expect(placeHeading).toBeVisible();
   await expect(page.getByText(/Coordonnées/)).toBeVisible();
-  const card = placeHeading.locator('xpath=ancestor::article');
-  const editHref = await card.getByRole('link', { name: 'Modifier' }).getAttribute('href');
-  expect(editHref).toBeTruthy();
 
   await logout(page);
-  await login(page, 'new.organizer@e2e.makolo.test');
-  const response = await page.goto(editHref);
-  expect(response.status()).toBe(403);
+  await login(page, 'other.owner@e2e.makolo.test');
+  await page.goto('/organizations/makolo-e2e-events/places/');
+  await expect(page.getByText('Page introuvable')).toBeVisible();
 });
