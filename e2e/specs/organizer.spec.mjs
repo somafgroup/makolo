@@ -81,6 +81,8 @@ test('space owner creates a reusable place and another space owner is isolated',
 
   await logout(page);
   await login(page, 'new.organizer@e2e.makolo.test');
-  await page.goto('/organizations/makolo-e2e-events/places/');
-  await expect(page.getByText('Page introuvable')).toBeVisible();
+  const response = await page.goto('/organizations/makolo-e2e-events/places/');
+  expect(response.status()).toBe(403);
+  await expect(page.getByText(/Erreur 403/i)).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Cet espace n’est pas accessible/i })).toBeVisible();
 });
