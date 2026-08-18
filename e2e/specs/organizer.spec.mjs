@@ -80,7 +80,7 @@ test('space owner creates a reusable place and another space owner is isolated',
   await expect(page.getByText(/Coordonnées/)).toBeVisible();
 
   await logout(page);
-  await login(page, 'other.owner@e2e.makolo.test');
+  await login(page, 'new.organizer@e2e.makolo.test');
   await page.goto('/organizations/makolo-e2e-events/places/');
   await expect(page.getByText('Page introuvable')).toBeVisible();
 });
