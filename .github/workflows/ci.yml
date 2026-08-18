@@ -302,7 +302,9 @@ jobs:
         run: python manage.py makemigrations --check --dry-run
 
       - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium firefox
+        run: |
+          printf '%s\n' 'https://archive.ubuntu.com/ubuntu' | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
+          npx playwright install --with-deps chromium firefox
 
       - name: Prepare deterministic E2E environment
         run: bash scripts/prepare-e2e.sh
