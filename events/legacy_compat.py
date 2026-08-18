@@ -32,6 +32,18 @@ _OCCURRENCE_FIELDS = {
     "timezone": "timezone",
 }
 _LEGACY_FIELDS = frozenset((*_ACTIVITY_FIELDS, *_OCCURRENCE_FIELDS, "capacity"))
+_EVENT_STATUS_LABELS = {
+    "draft": "Brouillon",
+    "published": "Publié",
+    "cancelled": "Annulé",
+    "completed": "Terminé",
+    "archived": "Archivé",
+}
+_EVENT_VISIBILITY_LABELS = {
+    "public": "Public",
+    "unlisted": "Non répertorié",
+    "private": "Privé",
+}
 
 
 def _pending(instance):
@@ -83,14 +95,22 @@ def _choice_display(choices, value):
         return value or ""
 
 
+def _event_choice_display(labels, choices, value):
+    return labels.get(value, _choice_display(choices, value))
+
+
 def _install_properties():
     for legacy, canonical in _ACTIVITY_FIELDS.items():
         setattr(Event, legacy, _property(legacy, canonical, "activity"))
     for legacy, canonical in _OCCURRENCE_FIELDS.items():
         setattr(Event, legacy, _property(legacy, canonical, "occurrence"))
     Event.capacity = _capacity_property()
-    Event.get_status_display = lambda instance: _choice_display(EventStatus, instance.status)
-    Event.get_visibility_display = lambda instance: _choice_display(EventVisibility, instance.visibility)
+    Event.get_status_display = lambda instance: _event_choice_display(
+        _EVENT_STATUS_LABELS, EventStatus, instance.status
+    )
+    Event.get_visibility_display = lambda instance: _event_choice_display(
+        _EVENT_VISIBILITY_LABELS, EventVisibility, instance.visibility
+    )
 
 
 def _install_init_and_save():
