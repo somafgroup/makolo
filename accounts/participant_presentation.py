@@ -8,6 +8,7 @@ from access.models import AccessStatus, CredentialStatus
 from activities.models import OccurrencePlaceRole
 from commerce.models import CommerceOrderStatus, PaymentMode
 from journeys.models import JourneyStatus, RequestStatus, WorkflowKind
+from payments.models import PaymentStatus
 
 
 JOURNEY_STATUS_LABELS = {
@@ -39,6 +40,14 @@ PAYMENT_MODE_LABELS = {
     PaymentMode.AFTER_APPROVAL: "Paiement après validation",
     PaymentMode.ON_SITE: "À payer sur place",
     PaymentMode.LATER: "Paiement prévu plus tard",
+}
+
+WORKFLOW_LABELS = {
+    WorkflowKind.PURCHASE: "Achat",
+    WorkflowKind.ORDER_APPROVAL: "Demande",
+    WorkflowKind.RESERVATION: "Réservation",
+    WorkflowKind.REGISTRATION: "Inscription",
+    WorkflowKind.INVITATION: "Invitation",
 }
 
 
@@ -123,27 +132,15 @@ def occurrence_presentation(*, activity, occurrence=None):
         "online_url": getattr(venue, "online_url", "") if venue else "",
         "venue_kind": getattr(venue, "kind", "") if venue else "",
         "is_past": bool(occurrence.end_at and occurrence.end_at <= now),
-        "is_ongoing": occurrence.start_at <= now and (
-            occurrence.end_at is None or occurrence.end_at > now
-        ),
+        "is_ongoing": occurrence.start_at <= now
+        and (occurrence.end_at is None or occurrence.end_at > now),
     }
 
 
 def journey_noun(journey):
-    event = event_for_activity(journey.activity)
-    if journey.workflow == WorkflowKind.INVITATION:
-        return "Invitation"
-    if journey.workflow == WorkflowKind.RESERVATION:
-        return "Réservation"
-    if journey.workflow == WorkflowKind.REGISTRATION:
-        return "Inscription"
-    if journey.workflow == WorkflowKind.ORDER_APPROVAL:
-        return "Demande"
-    if journey.workflow == WorkflowKind.PURCHASE and event is not None:
+    if journey.workflow == WorkflowKind.PURCHASE and event_for_activity(journey.activity) is not None:
         return "Achat de billet"
-    if journey.workflow == WorkflowKind.PURCHASE:
-        return "Achat"
-    return "Démarche"
+    return WORKFLOW_LABELS.get(journey.workflow, "Démarche")
 
 
 def access_noun(access):
@@ -168,7 +165,11 @@ def journey_orders(journey):
     cached = _prefetched_objects(journey, "commerce_orders")
     if cached is not None:
         return cached
-    return list(journey.commerce_orders.prefetch_related("payments", "items__offer").order_by("-created_at", "id"))
+    return list(
+        journey.commerce_orders.filter(buyer=journey.beneficiary)
+        .prefetch_related("payments", "items__offer")
+        .order_by("-created_at", "id")
+    )
 
 
 def journey_accesses(journey):
@@ -176,7 +177,8 @@ def journey_accesses(journey):
     if cached is not None:
         return cached
     return list(
-        journey.accesses.select_related("activity", "occurrence", "journey")
+        journey.accesses.filter(beneficiary=journey.beneficiary)
+        .select_related("activity", "occurrence", "journey")
         .prefetch_related("credentials")
         .order_by("-created_at", "id")
     )
@@ -198,7 +200,14 @@ def primary_access(journey):
         AccessStatus.REVOKED: 5,
         AccessStatus.EXPIRED: 6,
     }
-    return sorted(accesses, key=lambda row: (priority.get(row.status, 9), -row.created_at.timestamp()))[0] if accesses else None
+    return (
+        sorted(
+            accesses,
+            key=lambda row: (priority.get(row.status, 9), -row.created_at.timestamp()),
+        )[0]
+        if accesses
+        else None
+    )
 
 
 def active_credential(access):
@@ -206,6 +215,16 @@ def active_credential(access):
     if credentials is None:
         credentials = list(access.credentials.order_by("-version", "-issued_at", "id"))
     return next((row for row in credentials if row.status == CredentialStatus.ACTIVE), None)
+
+
+def offer_label_for_journey(journey):
+    order = primary_order(journey)
+    if order is None:
+        return ""
+    items = _prefetched_objects(order, "items")
+    if items is None:
+        items = list(order.items.select_related("offer").order_by("created_at", "id"))
+    return items[0].label_snapshot if items else ""
 
 
 def payment_mode_label(order):
@@ -234,7 +253,7 @@ def access_status_label(access):
         if noun == "Confirmation":
             return "Inscription confirmée"
         if noun == "Invitation":
-            return "Invitation confirmée"
+            return "Invitation acceptée"
         if noun == "Réservation":
             return "Réservation confirmée"
     if access.status == AccessStatus.USED and noun == "Billet":
@@ -250,6 +269,12 @@ def payment_presentation(journey):
     if payments is None:
         payments = list(order.payments.order_by("-created_at", "id"))
     latest = payments[0] if payments else None
+    can_pay_online = (
+        order.status == CommerceOrderStatus.PENDING
+        and order.total > 0
+        and order.payment_mode in {PaymentMode.UPFRONT, PaymentMode.AFTER_APPROVAL}
+        and not (latest and latest.status == PaymentStatus.SUCCEEDED)
+    )
     return {
         "order": order,
         "amount": order.total,
@@ -257,12 +282,10 @@ def payment_presentation(journey):
         "mode": order.payment_mode,
         "mode_label": payment_mode_label(order),
         "latest": latest,
-        "failed": bool(latest and latest.status == "failed"),
-        "succeeded": bool(latest and latest.status == "succeeded"),
+        "failed": bool(latest and latest.status == PaymentStatus.FAILED),
+        "succeeded": bool(latest and latest.status == PaymentStatus.SUCCEEDED),
         "action_url": reverse("payments:commerce-start", kwargs={"order_pk": order.pk})
-        if order.status == CommerceOrderStatus.PENDING
-        and order.total > 0
-        and order.payment_mode in {PaymentMode.UPFRONT, PaymentMode.AFTER_APPROVAL}
+        if can_pay_online
         else "",
     }
 
@@ -272,6 +295,16 @@ def next_participant_action(journey):
     access = primary_access(journey)
     order = primary_order(journey)
 
+    if journey.workflow == WorkflowKind.INVITATION and journey.status in {
+        JourneyStatus.DRAFT,
+        JourneyStatus.SUBMITTED,
+    }:
+        return {
+            "label": "Répondre à l’invitation",
+            "url": detail_url,
+            "description": "Votre réponse est attendue.",
+            "actionable": True,
+        }
     if journey.status == JourneyStatus.DRAFT:
         return {
             "label": "Continuer",
@@ -281,7 +314,7 @@ def next_participant_action(journey):
         }
     if journey.status in {JourneyStatus.SUBMITTED, JourneyStatus.PENDING_APPROVAL}:
         return {
-            "label": "En attente de validation",
+            "label": "Attendre la validation",
             "url": detail_url,
             "description": "Aucune action n’est requise pour le moment.",
             "actionable": False,
@@ -322,8 +355,15 @@ def next_participant_action(journey):
             "actionable": False,
         }
     if journey.status in {JourneyStatus.CONFIRMED, JourneyStatus.FULFILLED} and access is not None:
+        noun = access_noun(access)
+        label = {
+            "Billet": "Voir mon billet",
+            "Confirmation": "Voir ma confirmation",
+            "Invitation": "Voir mon invitation",
+            "Réservation": "Voir ma réservation",
+        }.get(noun, "Voir mon accès")
         return {
-            "label": f"Voir {access_noun(access).lower()}",
+            "label": label,
             "url": reverse("account:access-detail", kwargs={"pk": access.pk}),
             "description": access_status_label(access),
             "actionable": True,
@@ -338,6 +378,18 @@ def next_participant_action(journey):
 
 def _timeline_label(journey, status):
     noun = journey_noun(journey)
+    if journey.workflow == WorkflowKind.INVITATION:
+        return {
+            JourneyStatus.DRAFT: "Invitation reçue",
+            JourneyStatus.SUBMITTED: "Invitation reçue",
+            JourneyStatus.PENDING_APPROVAL: "Réponse en cours",
+            JourneyStatus.APPROVED: "Invitation acceptée",
+            JourneyStatus.CONFIRMED: "Invitation confirmée",
+            JourneyStatus.FULFILLED: "Invitation terminée",
+            JourneyStatus.REJECTED: "Invitation refusée",
+            JourneyStatus.CANCELLED: "Invitation refusée",
+            JourneyStatus.EXPIRED: "Invitation expirée",
+        }.get(status, JOURNEY_STATUS_LABELS.get(status, status))
     if status == JourneyStatus.DRAFT:
         return f"{noun} commencée"
     if status == JourneyStatus.SUBMITTED:
@@ -376,7 +428,8 @@ def journey_timeline(journey):
             "status": status,
             "label": _timeline_label(journey, status),
             "current": status == journey.status,
-            "complete": status != journey.status or journey.status in {JourneyStatus.CONFIRMED, JourneyStatus.FULFILLED},
+            "complete": status != journey.status
+            or journey.status in {JourneyStatus.CONFIRMED, JourneyStatus.FULFILLED},
         }
         for status in deduped
     ]
@@ -401,16 +454,29 @@ def request_presentation(journey):
     if request is None:
         return None
     if request.status == RequestStatus.PENDING:
-        return {"status": request.status, "label": "En attente de validation", "message": "Makolo attend la décision de la personne ou de l’équipe responsable."}
+        return {
+            "status": request.status,
+            "label": "En attente de validation",
+            "message": "Makolo attend la décision de la personne ou de l’équipe responsable.",
+        }
     if request.status == RequestStatus.REJECTED:
-        return {"status": request.status, "label": "Demande refusée", "message": "Cette demande n’a pas été acceptée."}
+        return {
+            "status": request.status,
+            "label": "Demande refusée",
+            "message": "Cette demande n’a pas été acceptée.",
+        }
     if request.status == RequestStatus.APPROVED:
-        return {"status": request.status, "label": "Demande approuvée", "message": "La validation a été reçue."}
+        return {
+            "status": request.status,
+            "label": "Demande approuvée",
+            "message": "La validation a été reçue.",
+        }
     return {"status": request.status, "label": request.get_status_display(), "message": ""}
 
 
 def journey_presentation(journey):
     occurrence = occurrence_presentation(activity=journey.activity, occurrence=journey.occurrence)
+    access = primary_access(journey)
     return {
         "object": journey,
         "noun": journey_noun(journey),
@@ -420,9 +486,12 @@ def journey_presentation(journey):
         "next_action": next_participant_action(journey),
         "payment": payment_presentation(journey),
         "request": request_presentation(journey),
-        "access": primary_access(journey),
+        "access": access,
+        "access_label": access_status_label(access) if access else "",
+        "offer_label": offer_label_for_journey(journey),
         "timeline": journey_timeline(journey),
         "detail_url": reverse("account:journey-detail", kwargs={"pk": journey.pk}),
+        "is_event": event_for_activity(journey.activity) is not None,
     }
 
 
@@ -430,11 +499,8 @@ def access_presentation(access):
     occurrence = occurrence_presentation(activity=access.activity, occurrence=access.occurrence)
     credential = active_credential(access)
     noun = access_noun(access)
-    legacy_ticket = None
-    try:
-        legacy_ticket = access.ticket
-    except (ObjectDoesNotExist, AttributeError):
-        pass
+    offer_label = offer_label_for_journey(access.journey) if access.journey_id else ""
+    qr_available = bool(access.status == AccessStatus.VALID and credential is not None)
     return {
         "object": access,
         "noun": noun,
@@ -442,9 +508,11 @@ def access_presentation(access):
         "status_label": access_status_label(access),
         "occurrence": occurrence,
         "credential": credential,
-        "legacy_ticket": legacy_ticket,
+        "offer_label": offer_label,
         "detail_url": reverse("account:access-detail", kwargs={"pk": access.pk}),
-        "qr_url": reverse("account:access-qr", kwargs={"pk": access.pk}) if credential else "",
+        "qr_url": reverse("account:access-qr", kwargs={"pk": access.pk}) if qr_available else "",
+        "qr_available": qr_available,
+        "is_event": event_for_activity(access.activity) is not None,
     }
 
 
