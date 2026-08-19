@@ -14,7 +14,36 @@ ACTIONABLE_JOURNEY_STATUSES = [
     JourneyStatus.SUBMITTED,
     JourneyStatus.APPROVED,
 ]
-ACTIVE_ACCESS_STATUSES = [AccessStatus.PENDING, AccessStatus.VALID, AccessStatus.USED]
+ACTIVE_JOURNEY_STATUSES = [
+    JourneyStatus.DRAFT,
+    JourneyStatus.SUBMITTED,
+    JourneyStatus.PENDING_APPROVAL,
+    JourneyStatus.APPROVED,
+    JourneyStatus.PENDING_PAYMENT,
+    JourneyStatus.CONFIRMED,
+]
+HISTORY_JOURNEY_STATUSES = [
+    JourneyStatus.FULFILLED,
+    JourneyStatus.REJECTED,
+    JourneyStatus.CANCELLED,
+    JourneyStatus.EXPIRED,
+]
+ACTIVE_ACCESS_STATUSES = [AccessStatus.PENDING, AccessStatus.VALID]
+HISTORY_ACCESS_STATUSES = [
+    AccessStatus.USED,
+    AccessStatus.CANCELLED,
+    AccessStatus.REVOKED,
+    AccessStatus.EXPIRED,
+    AccessStatus.TRANSFERRED,
+]
+
+
+def _participant_user(profile):
+    """Accept the authenticated User used by the canonical core or its UserProfile wrapper."""
+    user = getattr(profile, "user", profile)
+    if not getattr(user, "is_authenticated", False):
+        return None
+    return user
 
 
 def _place_links_queryset():
@@ -52,18 +81,25 @@ def _access_queryset():
 
 
 def participant_journeys(profile):
-    """Canonical participant Journeys, independent from TicketOrder projections."""
-    if not getattr(profile, "is_authenticated", False):
+    """Canonical Journeys owned by the participant as beneficiary.
+
+    Initiating a Journey for another person never grants access to that person's
+    participant surface. Administrative visibility belongs to contextual
+    authority views, not this selector.
+    """
+    user = _participant_user(profile)
+    if user is None:
         return Journey.objects.none()
 
     order_items = CommerceOrderItem.objects.select_related("offer").order_by("created_at", "id")
-    orders = (
-        CommerceOrder.objects.select_related("buyer", "payee_space")
+    own_orders = (
+        CommerceOrder.objects.filter(buyer=user)
+        .select_related("buyer", "payee_space")
         .prefetch_related(Prefetch("items", queryset=order_items), "payments")
         .order_by("-created_at", "id")
     )
     return (
-        Journey.objects.filter(Q(beneficiary=profile) | Q(initiated_by=profile))
+        Journey.objects.filter(beneficiary=user)
         .select_related(
             "beneficiary",
             "initiated_by",
@@ -79,10 +115,9 @@ def participant_journeys(profile):
             Prefetch("occurrence__place_links", queryset=_place_links_queryset()),
             Prefetch("requests", queryset=JourneyRequest.objects.order_by("created_at", "id")),
             Prefetch("transitions", queryset=JourneyTransition.objects.order_by("created_at", "id")),
-            Prefetch("commerce_orders", queryset=orders),
-            Prefetch("accesses", queryset=_access_queryset()),
+            Prefetch("commerce_orders", queryset=own_orders),
+            Prefetch("accesses", queryset=_access_queryset().filter(beneficiary=user)),
         )
-        .distinct()
         .order_by("-created_at", "id")
     )
 
@@ -107,13 +142,22 @@ def participant_actionable_journeys(profile):
     )
 
 
+def participant_active_journeys(profile):
+    return participant_journeys(profile).filter(status__in=ACTIVE_JOURNEY_STATUSES)
+
+
+def participant_history_journeys(profile):
+    return participant_journeys(profile).filter(status__in=HISTORY_JOURNEY_STATUSES)
+
+
 def participant_accesses(profile):
-    """Canonical participant Access rights, including history and transfers."""
-    if not getattr(profile, "is_authenticated", False):
+    """Canonical Access rights owned by the participant, including history."""
+    user = _participant_user(profile)
+    if user is None:
         return Access.objects.none()
     return (
         _access_queryset()
-        .filter(beneficiary=profile)
+        .filter(beneficiary=user)
         .annotate(
             participant_priority=Case(
                 When(status=AccessStatus.VALID, then=Value(0)),
@@ -127,53 +171,59 @@ def participant_accesses(profile):
     )
 
 
+def participant_active_accesses(profile):
+    return participant_accesses(profile).filter(status__in=ACTIVE_ACCESS_STATUSES)
+
+
 def participant_upcoming_accesses(profile, *, now=None):
     now = now or timezone.now()
     return (
-        participant_accesses(profile)
-        .filter(status__in=[AccessStatus.PENDING, AccessStatus.VALID])
+        participant_active_accesses(profile)
         .filter(
             Q(occurrence__isnull=True)
             | Q(occurrence__end_at__gte=now)
-            | Q(occurrence__end_at__isnull=True)
+            | Q(occurrence__end_at__isnull=True, occurrence__start_at__gte=now)
         )
         .order_by("occurrence__start_at", "-created_at")
     )
 
 
+def participant_access_history(profile):
+    return participant_accesses(profile).filter(status__in=HISTORY_ACCESS_STATUSES)
+
+
 def participant_orders(profile):
-    """Canonical Commerce orders visible to their participant owner."""
-    if not getattr(profile, "is_authenticated", False):
+    """Commerce orders owned by this participant as buyer.
+
+    A Journey beneficiary does not automatically gain visibility over a third
+    party payer's financial order.
+    """
+    user = _participant_user(profile)
+    if user is None:
         return CommerceOrder.objects.none()
     items = CommerceOrderItem.objects.select_related("offer").order_by("created_at", "id")
     return (
-        CommerceOrder.objects.filter(
-            Q(buyer=profile)
-            | Q(journey__beneficiary=profile)
-            | Q(journey__initiated_by=profile)
-        )
+        CommerceOrder.objects.filter(buyer=user)
         .select_related("buyer", "journey", "journey__activity", "journey__occurrence")
         .prefetch_related(Prefetch("items", queryset=items), "payments")
-        .distinct()
         .order_by("-created_at", "id")
     )
 
 
 def participant_upcoming_occurrences(profile, *, now=None):
-    """Upcoming Occurrences reached through Journey or Access, never Event dates."""
+    """Upcoming Occurrences reached through the participant's Journey or Access."""
+    user = _participant_user(profile)
+    if user is None:
+        return Occurrence.objects.none()
     now = now or timezone.now()
     return (
         Occurrence.objects.filter(
             Q(
-                access_rights__beneficiary=profile,
-                access_rights__status__in=[AccessStatus.PENDING, AccessStatus.VALID],
+                access_rights__beneficiary=user,
+                access_rights__status__in=ACTIVE_ACCESS_STATUSES,
             )
             | Q(
-                journeys__beneficiary=profile,
-                journeys__status__in=ACTIONABLE_JOURNEY_STATUSES + [JourneyStatus.CONFIRMED],
-            )
-            | Q(
-                journeys__initiated_by=profile,
+                journeys__beneficiary=user,
                 journeys__status__in=ACTIONABLE_JOURNEY_STATUSES + [JourneyStatus.CONFIRMED],
             ),
             status__in=[OccurrenceStatus.SCHEDULED, OccurrenceStatus.DRAFT],
