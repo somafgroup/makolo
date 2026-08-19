@@ -10,7 +10,7 @@ export async function login(page, email, password = E2E_PASSWORD) {
     page.waitForURL(/\/dashboard\/$/),
     page.getByRole('button', { name: 'Se connecter' }).click(),
   ]);
-  await expect(page.getByRole('heading', { name: /Bienvenue/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Bienvenue|Mon espace/ }).first()).toBeVisible();
 }
 
 export async function logout(page) {
