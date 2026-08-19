@@ -6,6 +6,7 @@ from django.views import View
 from django.views.generic import ListView
 
 from accounts.models import NotificationPreference
+from accounts.participant_presentation import notification_participant_url
 
 from .forms import NotificationPreferenceForm
 from .selectors import get_notifications_for_user
@@ -38,6 +39,9 @@ class NotificationOpenView(LoginRequiredMixin, View):
     def get(self, request, pk):
         notification = get_object_or_404(get_notifications_for_user(request.user), pk=pk)
         notification.mark_read()
+        participant_url = notification_participant_url(notification)
+        if participant_url:
+            return redirect(participant_url)
         if notification.action_url.startswith("/") and not notification.action_url.startswith("//"):
             return redirect(notification.action_url)
         return redirect("notifications:list")
