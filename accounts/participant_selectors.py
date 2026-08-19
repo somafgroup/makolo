@@ -39,7 +39,7 @@ HISTORY_ACCESS_STATUSES = [
 
 
 def _participant_user(profile):
-    """Accept the authenticated User used by the canonical core or its UserProfile wrapper."""
+    """Accept the authenticated User used by the core or its UserProfile wrapper."""
     user = getattr(profile, "user", profile)
     if not getattr(user, "is_authenticated", False):
         return None
@@ -60,24 +60,41 @@ def _credentials_queryset():
     return AccessCredential.objects.order_by("-version", "-issued_at", "id")
 
 
-def _access_queryset():
+def _order_items_queryset():
+    return CommerceOrderItem.objects.select_related("offer").order_by("created_at", "id")
+
+
+def _orders_queryset(user):
     return (
-        Access.objects.select_related(
-            "beneficiary",
-            "activity",
-            "activity__space",
-            "activity__event_vertical",
-            "activity__event_vertical__venue",
-            "activity__event_vertical__venue__place",
-            "occurrence",
-            "journey",
-        )
-        .prefetch_related(
-            Prefetch("credentials", queryset=_credentials_queryset()),
-            Prefetch("occurrence__place_links", queryset=_place_links_queryset()),
-            Prefetch("activity__occurrences", queryset=_occurrences_queryset()),
-        )
+        CommerceOrder.objects.filter(buyer=user)
+        .select_related("buyer", "payee_space", "journey")
+        .prefetch_related(Prefetch("items", queryset=_order_items_queryset()), "payments")
+        .order_by("-created_at", "id")
     )
+
+
+def _access_queryset(user=None):
+    queryset = Access.objects.select_related(
+        "beneficiary",
+        "activity",
+        "activity__space",
+        "activity__event_vertical",
+        "activity__event_vertical__venue",
+        "activity__event_vertical__venue__place",
+        "occurrence",
+        "journey",
+        "journey__activity",
+        "journey__occurrence",
+    ).prefetch_related(
+        Prefetch("credentials", queryset=_credentials_queryset()),
+        Prefetch("occurrence__place_links", queryset=_place_links_queryset()),
+        Prefetch("activity__occurrences", queryset=_occurrences_queryset()),
+    )
+    if user is not None:
+        queryset = queryset.prefetch_related(
+            Prefetch("journey__commerce_orders", queryset=_orders_queryset(user))
+        )
+    return queryset
 
 
 def participant_journeys(profile):
@@ -91,13 +108,6 @@ def participant_journeys(profile):
     if user is None:
         return Journey.objects.none()
 
-    order_items = CommerceOrderItem.objects.select_related("offer").order_by("created_at", "id")
-    own_orders = (
-        CommerceOrder.objects.filter(buyer=user)
-        .select_related("buyer", "payee_space")
-        .prefetch_related(Prefetch("items", queryset=order_items), "payments")
-        .order_by("-created_at", "id")
-    )
     return (
         Journey.objects.filter(beneficiary=user)
         .select_related(
@@ -115,8 +125,8 @@ def participant_journeys(profile):
             Prefetch("occurrence__place_links", queryset=_place_links_queryset()),
             Prefetch("requests", queryset=JourneyRequest.objects.order_by("created_at", "id")),
             Prefetch("transitions", queryset=JourneyTransition.objects.order_by("created_at", "id")),
-            Prefetch("commerce_orders", queryset=own_orders),
-            Prefetch("accesses", queryset=_access_queryset().filter(beneficiary=user)),
+            Prefetch("commerce_orders", queryset=_orders_queryset(user)),
+            Prefetch("accesses", queryset=_access_queryset(user).filter(beneficiary=user)),
         )
         .order_by("-created_at", "id")
     )
@@ -156,7 +166,7 @@ def participant_accesses(profile):
     if user is None:
         return Access.objects.none()
     return (
-        _access_queryset()
+        _access_queryset(user)
         .filter(beneficiary=user)
         .annotate(
             participant_priority=Case(
@@ -201,11 +211,9 @@ def participant_orders(profile):
     user = _participant_user(profile)
     if user is None:
         return CommerceOrder.objects.none()
-    items = CommerceOrderItem.objects.select_related("offer").order_by("created_at", "id")
     return (
-        CommerceOrder.objects.filter(buyer=user)
-        .select_related("buyer", "journey", "journey__activity", "journey__occurrence")
-        .prefetch_related(Prefetch("items", queryset=items), "payments")
+        _orders_queryset(user)
+        .select_related("journey__activity", "journey__occurrence")
         .order_by("-created_at", "id")
     )
 
