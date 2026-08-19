@@ -1,34 +1,12 @@
 {% extends 'base/app.html' %}
 {% block title %}Vue d’ensemble | Makolo{% endblock %}
 {% block content %}
+{% if dashboard_mode == 'participant' %}
+    {% include 'accounts/_participant_home.html' %}
+{% else %}
 <div class="space-y-7 lg:space-y-9">
-    {% if dashboard_mode == 'participant' %}
     <section class="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
-        <div class="max-w-3xl"><span class="mk-kicker">Espace participant</span><h1 class="mk-page-title">Bienvenue{% if request.user.first_name %}, {{ request.user.first_name|title }}{% endif %}.</h1><p class="mk-page-copy mt-4 text-[15px]">Vos prochains rendez-vous, billets, favoris et découvertes utiles — sans outils d’organisation qui ne vous concernent pas.</p></div>
-        <div class="flex flex-wrap gap-2"><a href="{% url 'discovery:home' %}" class="mk-btn mk-btn-secondary"><i data-lucide="compass" class="h-4 w-4"></i>Découvrir</a><a href="{% url 'tickets:list' %}" class="mk-btn mk-btn-primary"><i data-lucide="ticket-check" class="h-4 w-4"></i>Mes billets</a></div>
-    </section>
-
-    <section class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <a href="{% url 'tickets:list' %}" class="mk-stat-card block"><div class="flex items-center justify-between"><p class="mk-stat-label">Mes billets</p><i data-lucide="ticket" class="h-4 w-4" style="color:var(--mk-subtle)"></i></div><p class="mk-stat-value">{{ tickets_count }}</p><p class="mk-stat-meta">{{ valid_tickets_count }} valide(s)</p></a>
-        <a href="{% url 'discovery:bookmarks' %}" class="mk-stat-card block"><div class="flex items-center justify-between"><p class="mk-stat-label">Favoris</p><i data-lucide="heart" class="h-4 w-4" style="color:var(--mk-subtle)"></i></div><p class="mk-stat-value">{{ bookmarks_count }}</p><p class="mk-stat-meta">à retrouver plus tard</p></a>
-        <a href="{% url 'discovery:for-you' %}" class="mk-stat-card block"><div class="flex items-center justify-between"><p class="mk-stat-label">Pour vous</p><i data-lucide="sparkles" class="h-4 w-4" style="color:var(--mk-subtle)"></i></div><p class="mk-stat-value">{{ recommendations|length }}</p><p class="mk-stat-meta">suggestion(s) immédiate(s)</p></a>
-    </section>
-
-    <section class="mk-panel overflow-hidden">
-        <div class="flex items-center justify-between gap-4 border-b px-5 py-5 sm:px-6" style="border-color:var(--mk-border)"><div><h2 class="text-sm font-extrabold">Mes prochains événements</h2><p class="mt-1 text-xs" style="color:var(--mk-muted)">Les événements couverts par vos billets confirmés.</p></div><a href="{% url 'discovery:my-events' %}" class="mk-btn mk-btn-ghost">Voir tout<i data-lucide="arrow-right" class="h-4 w-4"></i></a></div>
-        <div>{% for ticket in upcoming_tickets %}<a href="{% url 'events:detail' ticket.event.slug %}" class="group grid gap-3 border-b px-5 py-4 transition last:border-b-0 hover:bg-black/[.018] dark:hover:bg-white/[.025] sm:grid-cols-[70px_1fr_auto] sm:items-center sm:px-6" style="border-color:var(--mk-border)"><div><p class="text-xl font-[750] tracking-[-.04em]">{{ ticket.event.start_at|date:'d' }}</p><p class="text-[10px] font-bold uppercase tracking-[.1em]" style="color:var(--mk-subtle)">{{ ticket.event.start_at|date:'M' }}</p></div><div class="min-w-0"><p class="truncate text-sm font-bold">{{ ticket.event.title }}</p><p class="mt-1 truncate text-xs" style="color:var(--mk-muted)">{{ ticket.ticket_type.name }} · {{ ticket.event.start_at|date:'H:i' }}</p></div><span class="mk-badge mk-badge-success">{{ ticket.get_status_display }}</span></a>{% empty %}<div class="px-6 py-11 text-center"><i data-lucide="calendar-search" class="mx-auto h-6 w-6" style="color:var(--mk-subtle)"></i><p class="mt-3 text-sm font-semibold">Aucun billet pour un événement à venir.</p><a href="{% url 'discovery:home' %}" class="mk-btn mk-btn-secondary mt-4">Explorer les événements</a></div>{% endfor %}</div>
-    </section>
-
-    <section>
-        <div class="flex items-end justify-between gap-4"><div><span class="mk-kicker">Découverte</span><h2 class="mt-2 text-xl font-extrabold tracking-[-.03em]">Sélection pour vous</h2></div><a href="{% url 'discovery:for-you' %}" class="mk-btn mk-btn-ghost">Plus de suggestions</a></div>
-        <div class="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">{% for row in recommendations %}<div>{% include 'discovery/_event_card.html' with event=row.event %}<p class="mt-2 px-1 text-[11px] leading-5" style="color:var(--mk-muted)">{{ row.reasons|join:' · ' }}</p></div>{% empty %}<div class="mk-panel p-6 md:col-span-2 xl:col-span-4"><p class="text-sm font-semibold">Votre sélection se construira avec vos favoris et organisateurs suivis.</p></div>{% endfor %}</div>
-    </section>
-
-    {% if recent_orders %}<section class="mk-panel p-5 sm:p-6"><div class="flex items-center justify-between"><h2 class="text-sm font-extrabold">Commandes récentes</h2><a href="{% url 'tickets:list' %}" class="text-xs font-bold" style="color:var(--mk-brand)">Billetterie</a></div><div class="mt-4 divide-y" style="border-color:var(--mk-border)">{% for order in recent_orders %}<div class="flex flex-col gap-1 py-3 sm:flex-row sm:items-center sm:justify-between"><div><p class="text-sm font-semibold">{{ order.event.title }}</p><p class="mt-1 text-xs" style="color:var(--mk-muted)">{{ order.reference }} · {{ order.created_at|date:'d/m/Y' }}</p></div><span class="mk-badge">{{ order.get_status_display }}</span></div>{% endfor %}</div></section>{% endif %}
-
-    {% else %}
-    <section class="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
-        <div class="max-w-3xl"><span class="mk-kicker">{% if dashboard_mode == 'staff' %}Pilotage plateforme{% else %}Espace organisation{% endif %}</span><h1 class="mk-page-title">Bienvenue{% if request.user.first_name %}, {{ request.user.first_name|title }}{% endif %}.</h1><p class="mk-page-copy mt-4 text-[15px]">{% if dashboard_mode == 'staff' %}Votre vue Makolo combine les raccourcis plateforme et les données auxquelles le staff a accès.{% else %}Votre activité d’organisation, limitée aux événements et données accessibles à vos responsabilités.{% endif %}</p></div>
+        <div class="max-w-3xl"><span class="mk-kicker">{% if dashboard_mode == 'staff' %}Pilotage plateforme{% else %}Espace organisation{% endif %}</span><h1 class="mk-page-title">Bienvenue{% if request.user.first_name %}, {{ request.user.first_name|title }}{% endif %}.</h1><p class="mk-page-copy mt-4 text-[15px]">{% if dashboard_mode == 'staff' %}Votre vue Makolo combine les raccourcis plateforme et les données auxquelles le staff a accès.{% else %}Votre activité d’organisation, limitée aux événements et données accessibles à vos responsabilités. Votre espace personnel reste accessible depuis la navigation Personnel.{% endif %}</p></div>
         <div class="flex flex-wrap gap-2">{% if web_capabilities.can_manage_access %}<a href="{% url 'scanner:home' %}" class="mk-btn mk-btn-secondary"><i data-lucide="scan-line" class="h-4 w-4"></i>Accès</a>{% endif %}{% if dashboard_mode == 'staff' %}<a href="{% url 'operations:dashboard' %}" class="mk-btn mk-btn-secondary"><i data-lucide="shield-check" class="h-4 w-4"></i>Operations</a>{% endif %}{% if can_create_event %}<a href="{% url 'events:create' %}" class="mk-btn mk-btn-primary"><i data-lucide="plus" class="h-4 w-4"></i>Créer un événement</a>{% endif %}</div>
     </section>
 
@@ -43,6 +21,6 @@
         <div class="flex flex-col gap-4 border-b px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6" style="border-color:var(--mk-border)"><div><p class="text-sm font-bold tracking-[-.02em]">Prochains événements gérés</p><p class="mt-1 text-xs" style="color:var(--mk-muted)">Uniquement dans votre périmètre d’organisation.</p></div>{% if web_capabilities.can_manage_events %}<a href="{% url 'events:list' %}" class="mk-btn mk-btn-ghost">Voir tout<i data-lucide="arrow-right" class="h-4 w-4"></i></a>{% endif %}</div>
         <div>{% for event in upcoming_events %}<a href="{% url 'events:detail' event.slug %}" class="group grid gap-3 border-b px-5 py-4 transition last:border-b-0 hover:bg-black/[.018] dark:hover:bg-white/[.025] sm:grid-cols-[84px_1fr_auto] sm:items-center sm:px-6" style="border-color:var(--mk-border)"><div><p class="text-xl font-[750] tracking-[-.04em]">{{ event.start_at|date:'d' }}</p><p class="text-[10px] font-bold uppercase tracking-[.1em]" style="color:var(--mk-subtle)">{{ event.start_at|date:'M Y' }}</p></div><div class="min-w-0"><p class="truncate text-sm font-bold transition group-hover:text-indigo-600 dark:group-hover:text-indigo-400">{{ event.title }}</p><p class="mt-1 truncate text-xs" style="color:var(--mk-muted)">{{ event.start_at|date:'H:i' }}{% if event.venue %} · {{ event.venue }}{% endif %}</p></div><div class="flex items-center gap-2"><span class="mk-badge {% if event.status == 'published' %}mk-badge-brand{% endif %}">{{ event.get_status_display }}</span><i data-lucide="chevron-right" class="h-4 w-4" style="color:var(--mk-subtle)"></i></div></a>{% empty %}<div class="px-6 py-12 text-center"><i data-lucide="calendar-x" class="mx-auto h-6 w-6" style="color:var(--mk-subtle)"></i><p class="mt-3 text-sm font-semibold">Aucun événement à venir dans votre périmètre.</p></div>{% endfor %}</div>
     </section>
-    {% endif %}
 </div>
+{% endif %}
 {% endblock %}
