@@ -1,5 +1,6 @@
 from django import forms
 from django.conf import settings
+from django.core.exceptions import ObjectDoesNotExist
 
 from events.permissions import user_can_manage_event
 
@@ -17,19 +18,36 @@ class PaymentStartForm(forms.Form):
         super().__init__(*args, **kwargs)
         self.order = order
         self.user = user
+
+        legacy_order = None
+        event = getattr(order, "event", None) if order is not None else None
+        if order is not None and event is None:
+            try:
+                legacy_order = order.ticket_order
+            except (AttributeError, ObjectDoesNotExist):
+                legacy_order = None
+            event = getattr(legacy_order, "event", None)
+
         provider_choices = []
         if getattr(settings, "PAYMENTS_SANDBOX_ENABLED", False):
-            provider_choices.append(
-                (PaymentProvider.SANDBOX, PaymentProvider.SANDBOX.label)
-            )
-        if order and user and user_can_manage_event(user, order.event):
-            provider_choices.append(
-                (PaymentProvider.MANUAL, PaymentProvider.MANUAL.label)
-            )
+            provider_choices.append((PaymentProvider.SANDBOX, PaymentProvider.SANDBOX.label))
+        if user and event is not None and user_can_manage_event(user, event):
+            provider_choices.append((PaymentProvider.MANUAL, PaymentProvider.MANUAL.label))
+        elif user and event is None and getattr(user, "is_staff", False):
+            provider_choices.append((PaymentProvider.MANUAL, PaymentProvider.MANUAL.label))
         self.fields["provider"].choices = provider_choices
-        if order:
-            self.fields["payer_name"].initial = order.customer_name
-            self.fields["payer_email"].initial = order.customer_email
+
+        if legacy_order is None and order is not None and hasattr(order, "customer_name"):
+            legacy_order = order
+        if legacy_order is not None:
+            self.fields["payer_name"].initial = legacy_order.customer_name
+            self.fields["payer_email"].initial = legacy_order.customer_email
+        elif order is not None:
+            buyer = getattr(order, "buyer", None)
+            self.fields["payer_name"].initial = (
+                getattr(buyer, "full_name", "") or getattr(buyer, "username", "")
+            )
+            self.fields["payer_email"].initial = getattr(buyer, "email", "")
 
 
 class ManualPaymentCompleteForm(forms.Form):

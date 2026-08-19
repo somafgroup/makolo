@@ -7,20 +7,25 @@ async function expectNoHorizontalOverflow(page) {
 }
 
 
-test('event detail, profile and ticket stay usable on mobile @mobile', async ({ page }) => {
+test('participant home, profile and canonical Access QR stay usable on mobile @mobile', async ({ page }) => {
   await page.goto('/events/festival-makolo-e2e/');
   await expect(page.getByRole('link', { name: /Obtenir des billets/i })).toBeVisible();
   await expectNoHorizontalOverflow(page);
 
-  await login(page, 'visual.participant@e2e.makolo.test');
+  await login(page, 'participant@e2e.makolo.test');
+  await page.goto('/account/');
+  await expect(page.getByRole('heading', { name: 'Mon espace' })).toBeVisible();
+  await expect(page.getByText('Atelier citoyen Makolo E2E').first()).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+
   await page.goto('/account/profile/');
   await expect(page.getByRole('heading', { name: 'Mon profil' })).toBeVisible();
   await expect(page.getByRole('button', { name: /Enregistrer mon profil/i })).toBeVisible();
   await expectNoHorizontalOverflow(page);
 
-  await page.goto('/tickets/');
-  await page.getByRole('link', { name: /Invitation E2E/i }).first().click();
-  await expect(page.getByRole('img', { name: 'QR du ticket' })).toBeVisible();
+  await page.goto('/account/accesses/');
+  await page.getByText('Atelier citoyen Makolo E2E').first().click();
+  await expect(page.getByRole('img', { name: /QR de ma confirmation/i })).toBeVisible();
   await expectNoHorizontalOverflow(page);
 });
 

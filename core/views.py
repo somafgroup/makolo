@@ -6,8 +6,7 @@ from django.utils import timezone
 from django.views.generic import TemplateView
 
 from access.models import AccessStatus
-from discovery.models import EventBookmark
-from discovery.services import build_recommendations
+from accounts.participant_views import participant_home_context
 from events.models import Event, EventStatus
 from events.selectors import get_public_discoverable_events
 from organizations.models import Organization, OrganizationVerificationStatus
@@ -128,28 +127,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         )
 
         if dashboard_mode == "participant":
-            tickets = get_tickets_visible_to(user).filter(owner=user)
-            orders = get_orders_visible_to(user).filter(buyer=user)
-            upcoming_tickets = tickets.filter(
-                order__status=TicketOrderStatus.CONFIRMED,
-                access__occurrence__end_at__gte=now,
-            ).order_by("access__occurrence__start_at")
-            bookmarks = EventBookmark.objects.filter(user=user).select_related(
-                "event",
-                "event__activity",
-                "event__activity__space",
-            )
-            context.update(
-                {
-                    "tickets_count": tickets.count(),
-                    "valid_tickets_count": tickets.filter(self._valid_ticket_filter()).count(),
-                    "upcoming_tickets": upcoming_tickets[:4],
-                    "recent_orders": orders.order_by("-created_at")[:5],
-                    "bookmarks_count": bookmarks.count(),
-                    "recent_bookmarks": bookmarks[:4],
-                    "recommendations": build_recommendations(user, limit=4),
-                }
-            )
+            context.update(participant_home_context(user))
             return context
 
         events = self.get_event_queryset()

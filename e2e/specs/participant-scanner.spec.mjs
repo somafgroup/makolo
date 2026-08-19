@@ -20,11 +20,11 @@ async function completeSandboxPayment(page) {
   await page.getByRole('button', { name: /Initialiser le paiement/i }).click();
   await expect(page.getByText(/Sandbox/i)).toBeVisible();
   await page.getByRole('button', { name: /Simuler un paiement réussi/i }).click();
-  await expect(page.getByText(/Paiement sandbox confirmé/i)).toBeVisible();
+  await expect(page.getByText(/Paiement confirmé/i).first()).toBeVisible();
 }
 
 
-test('participant goes from discovery to favorite, payment, QR, accepted scan then duplicate refusal', async ({ page }, testInfo) => {
+test('participant goes from discovery to payment, Journey, Access QR, accepted scan then duplicate refusal', async ({ page }, testInfo) => {
   await login(page, 'participant@e2e.makolo.test');
   await expect(page.getByText(/Espace participant/i)).toBeVisible();
 
@@ -43,23 +43,20 @@ test('participant goes from discovery to favorite, payment, QR, accepted scan th
   await page.getByRole('button', { name: /Créer la commande/i }).click();
   await completeSandboxPayment(page);
 
-  const paymentDetailUrl = page.url();
   await page.goto('/notifications/');
-  const paymentNotifications = page.getByRole('heading', { name: 'Paiement confirmé', exact: true });
-  const ticketNotifications = page.getByRole('heading', { name: 'Vos billets sont disponibles', exact: true });
-  await expect(paymentNotifications).toHaveCount(1);
-  await expect(ticketNotifications).toHaveCount(1);
-  await page.goto(paymentDetailUrl);
+  await expect(page.getByRole('heading', { name: 'Paiement confirmé', exact: true })).toHaveCount(1);
+  await expect(page.getByRole('heading', { name: 'Vos billets sont disponibles', exact: true })).toHaveCount(1);
 
-  await page.getByRole('link', { name: /Commande MKO-/i }).click();
-  const ticketLink = page.getByRole('link', { name: /Pass standard E2E/i }).first();
-  await expect(ticketLink).toBeVisible();
-  await ticketLink.click();
-  const ticketUrl = page.url();
-  await expect(page.getByText('Valide', { exact: true }).first()).toBeVisible();
+  await page.goto('/account/journeys/');
+  const festivalJourney = page.locator('article').filter({ hasText: 'Festival Makolo E2E' }).first();
+  await expect(festivalJourney).toBeVisible();
+  await festivalJourney.getByRole('link', { name: /Voir mon billet/i }).click();
+  const accessUrl = page.url();
+  await expect(page.getByText('Billet valide', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('Pass standard E2E')).toBeVisible();
 
-  const qrPath = testInfo.outputPath('purchased-ticket-qr.png');
-  await page.getByRole('img', { name: 'QR du ticket' }).screenshot({ path: qrPath });
+  const qrPath = testInfo.outputPath('purchased-access-qr.png');
+  await page.getByRole('img', { name: /QR de mon billet/i }).screenshot({ path: qrPath });
 
   await logout(page);
   await login(page, 'scanner@e2e.makolo.test');
@@ -87,18 +84,56 @@ test('participant goes from discovery to favorite, payment, QR, accepted scan th
   await page.goto('/analytics/events/festival-makolo-e2e/');
   await expect(page.getByRole('heading', { name: 'Festival Makolo E2E' })).toBeVisible();
   await expect(page.getByText('1 scan(s) accepté(s)', { exact: true })).toBeVisible();
-  const financeSection = page.locator('section').filter({
-    has: page.getByRole('heading', { name: 'Revenus nets observés' }),
-  });
+  const financeSection = page.locator('section').filter({ has: page.getByRole('heading', { name: 'Revenus nets observés' }) });
   await expect(financeSection).toBeVisible();
   await expect(financeSection.getByText(/12[.,]00 USD/, { exact: true })).toBeVisible();
 
   await logout(page);
   await login(page, 'participant@e2e.makolo.test');
-  await page.goto(ticketUrl);
-  await expect(page.getByText('Utilisé', { exact: true }).first()).toBeVisible();
-  await page.goto('/discover/my-events/');
-  await expect(page.getByText('Festival Makolo E2E').first()).toBeVisible();
+  await page.goto(accessUrl);
+  await expect(page.getByText('Billet utilisé', { exact: true }).first()).toBeVisible();
+});
+
+
+test('canonical non-Event registration appears in home, Journey and Access without ticket vocabulary', async ({ page }) => {
+  await login(page, 'participant@e2e.makolo.test');
+  await page.goto('/account/');
+  await expect(page.getByText('Atelier citoyen Makolo E2E').first()).toBeVisible();
+  await expect(page.getByText('Maison Makolo E2E').first()).toBeVisible();
+
+  await page.goto('/account/journeys/');
+  const row = page.locator('article').filter({ hasText: 'Atelier citoyen Makolo E2E' }).first();
+  await expect(row).toBeVisible();
+  await row.getByRole('link', { name: /Voir ma confirmation/i }).click();
+  await expect(page.getByText('Confirmation', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('Inscription confirmée', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('Maison Makolo E2E')).toBeVisible();
+  await expect(page.getByRole('img', { name: /QR de ma confirmation/i })).toBeVisible();
+  await expect(page.getByText(/Type de billet/i)).toHaveCount(0);
+});
+
+
+test('participant can accept a canonical invitation and receive Access', async ({ page }) => {
+  await login(page, 'participant@e2e.makolo.test');
+  await page.goto('/account/journeys/');
+  const invitation = page.locator('article').filter({ hasText: 'Invitation Makolo E2E' }).first();
+  await expect(invitation).toBeVisible();
+  await invitation.getByRole('link', { name: /Répondre à l’invitation/i }).click();
+  await expect(page.getByText('Invitation à accepter')).toBeVisible();
+  await page.getByRole('button', { name: 'Accepter l’invitation' }).click();
+  await expect(page.getByText('Invitation acceptée').first()).toBeVisible();
+  await expect(page.getByRole('img', { name: /QR de mon invitation/i })).toBeVisible();
+});
+
+
+test('on-site reservation is presented as pay on site, never unpaid', async ({ page }) => {
+  await login(page, 'profile.user@e2e.makolo.test');
+  await page.goto('/account/journeys/');
+  const reservation = page.locator('article').filter({ hasText: 'Réservation Makolo E2E' }).first();
+  await expect(reservation).toBeVisible();
+  await reservation.getByRole('link', { name: /Voir ma réservation/i }).click();
+  await expect(page.getByText('À payer sur place')).toBeVisible();
+  await expect(page.getByText('Impayé')).toHaveCount(0);
 });
 
 
@@ -113,7 +148,7 @@ test('sandbox payment can be cancelled and retried without losing the order', as
   if (await method.locator('option').count() > 1) await method.selectOption({ index: 1 });
   await page.getByRole('button', { name: /Initialiser le paiement/i }).click();
   await page.getByRole('button', { name: /Annuler cette tentative/i }).click();
-  await expect(page.getByText(/Paiement annulé/i)).toBeVisible();
+  await expect(page.getByText(/Tentative de paiement annulée/i)).toBeVisible();
 
   await page.goto(orderUrl);
   await expect(page.getByRole('link', { name: /Payer maintenant/i })).toBeVisible();

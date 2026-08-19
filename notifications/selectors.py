@@ -6,7 +6,17 @@ from .models import DeliveryStatus, Notification, NotificationDelivery
 def get_notifications_for_user(user):
     if not getattr(user, "is_authenticated", False):
         return Notification.objects.none()
-    return Notification.objects.filter(recipient=user).prefetch_related("deliveries")
+    return (
+        Notification.objects.filter(recipient=user)
+        .select_related(
+            "activity",
+            "journey",
+            "access",
+            "commerce_order",
+            "commerce_order__journey",
+        )
+        .prefetch_related("deliveries")
+    )
 
 
 def get_unread_notifications_count(user) -> int:

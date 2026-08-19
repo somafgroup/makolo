@@ -1,6 +1,7 @@
 from django.urls import path
 
 from .views import (
+    CommercePaymentStartView,
     ManualPaymentCompleteView,
     PaymentCancelView,
     PaymentDetailView,
@@ -16,6 +17,11 @@ app_name = "payments"
 urlpatterns = [
     path("", PaymentListView.as_view(), name="list"),
     path("order/<uuid:order_pk>/new/", PaymentStartView.as_view(), name="start"),
+    path(
+        "commerce-order/<uuid:order_pk>/new/",
+        CommercePaymentStartView.as_view(),
+        name="commerce-start",
+    ),
     path("<uuid:pk>/", PaymentDetailView.as_view(), name="detail"),
     path(
         "<uuid:pk>/sandbox/complete/",

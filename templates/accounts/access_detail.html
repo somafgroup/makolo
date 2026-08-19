@@ -1,0 +1,24 @@
+{% extends 'base/app.html' %}
+{% block title %}{{ presentation.noun }} · {{ presentation.title }} | Makolo{% endblock %}
+{% block content %}
+<div class="mx-auto max-w-4xl space-y-6">
+    <a href="{% url 'account:access-list' %}" class="mk-btn mk-btn-ghost"><i data-lucide="arrow-left" class="h-4 w-4"></i>Mes accès</a>
+
+    <section class="mk-panel overflow-hidden">
+        <div class="p-5 sm:p-7"><div class="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between"><div class="min-w-0"><div class="flex flex-wrap gap-2"><span class="mk-badge mk-badge-brand">{{ presentation.noun }}</span><span class="mk-badge">{{ presentation.status_label }}</span></div><h1 class="mt-4 text-2xl font-extrabold tracking-[-.03em] sm:text-3xl">{{ presentation.title }}</h1>{% if presentation.offer_label %}<p class="mt-2 text-sm" style="color:var(--mk-muted)">{% if presentation.is_event %}Type de billet · {% endif %}{{ presentation.offer_label }}</p>{% endif %}</div>{% if access.journey_id %}<a href="{% url 'account:journey-detail' access.journey_id %}" class="mk-btn mk-btn-secondary w-full justify-center sm:w-auto">Voir la démarche</a>{% endif %}</div></div>
+
+        {% if presentation.qr_available %}
+        <div class="border-t px-5 py-7 text-center sm:px-7" style="border-color:var(--mk-border)"><p class="text-sm font-extrabold">Présentez ce QR au contrôle</p><div class="mx-auto mt-5 w-full max-w-[340px] rounded-3xl bg-white p-4 shadow-sm"><img src="{{ presentation.qr_url }}" alt="QR de mon {{ presentation.noun|lower }}" class="mx-auto block aspect-square w-full"></div><p class="mx-auto mt-4 max-w-lg text-xs leading-5" style="color:var(--mk-muted)">Gardez cette page disponible à l’arrivée. Le QR affiché correspond au credential actif de votre accès et n’est pas renouvelé lors de l’affichage.</p></div>
+        {% else %}
+        <div class="border-t px-5 py-7 sm:px-7" style="border-color:var(--mk-border)"><div class="rounded-2xl border p-4 text-sm" style="border-color:var(--mk-border)"><strong>Aucun QR actif à présenter.</strong><p class="mt-1" style="color:var(--mk-muted)">Cette page reste votre référence pour l’état, l’horaire et le lieu de cet accès.</p></div></div>
+        {% endif %}
+    </section>
+
+    <section class="grid gap-5 md:grid-cols-2">
+        <div class="mk-panel p-5 sm:p-6"><span class="mk-kicker">Quand</span>{% if presentation.occurrence.start %}<p class="mt-3 text-xl font-extrabold">{{ presentation.occurrence.start|date:'d M Y' }}</p><p class="mt-1 text-base font-semibold">{{ presentation.occurrence.start|date:'H:i' }}{% if presentation.occurrence.end %} – {{ presentation.occurrence.end|date:'H:i' }}{% endif %}</p>{% if presentation.occurrence.timezone %}<p class="mt-2 text-xs" style="color:var(--mk-subtle)">{{ presentation.occurrence.timezone }}</p>{% endif %}{% else %}<p class="mt-3 text-sm" style="color:var(--mk-muted)">Horaire à confirmer.</p>{% endif %}</div>
+        <div class="mk-panel p-5 sm:p-6"><span class="mk-kicker">Où</span>{% if presentation.occurrence.place_name %}<p class="mt-3 text-lg font-extrabold">{{ presentation.occurrence.place_name }}</p>{% if presentation.occurrence.address %}<p class="mt-1 text-sm" style="color:var(--mk-muted)">{{ presentation.occurrence.address }}</p>{% endif %}{% if presentation.occurrence.locality %}<p class="mt-1 text-sm" style="color:var(--mk-muted)">{{ presentation.occurrence.locality }}</p>{% endif %}{% elif presentation.occurrence.online_url %}<p class="mt-3 text-lg font-extrabold">En ligne</p><a href="{{ presentation.occurrence.online_url }}" rel="noopener noreferrer" class="mk-btn mk-btn-secondary mt-3">Ouvrir le lien</a>{% else %}<p class="mt-3 text-sm" style="color:var(--mk-muted)">Lieu à confirmer.</p>{% endif %}{% if presentation.occurrence.access_instructions %}<p class="mt-3 text-xs leading-5" style="color:var(--mk-subtle)">{{ presentation.occurrence.access_instructions }}</p>{% endif %}</div>
+    </section>
+
+    <section class="mk-panel p-5 sm:p-6"><span class="mk-kicker">État</span><h2 class="mt-2 text-lg font-extrabold">{{ presentation.status_label }}</h2>{% if access.status == 'used' %}<p class="mt-2 text-sm" style="color:var(--mk-muted)">Cet accès a déjà été utilisé.</p>{% elif access.status == 'revoked' %}<p class="mt-2 text-sm" style="color:var(--mk-muted)">Cet accès a été révoqué et ne peut plus être présenté.</p>{% elif access.status == 'expired' %}<p class="mt-2 text-sm" style="color:var(--mk-muted)">Cet accès est arrivé à expiration.</p>{% elif access.status == 'transferred' %}<p class="mt-2 text-sm" style="color:var(--mk-muted)">Cet accès a été transféré et n’est plus utilisable par ce compte.</p>{% endif %}</section>
+</div>
+{% endblock %}

@@ -8,7 +8,10 @@
             <div class="min-w-0">
                 <p class="truncate text-[10px] font-bold uppercase tracking-[.14em]" style="color:var(--mk-subtle)">Makolo</p>
                 <h2 class="truncate text-[16px] font-bold tracking-[-.025em] sm:text-[18px]" style="color:var(--mk-text)">
-                    {% if request.resolver_match.namespace == 'account' %}Mon compte
+                    {% if request.resolver_match.namespace == 'account' and request.resolver_match.url_name == 'home' %}Mon espace
+                    {% elif request.resolver_match.namespace == 'account' and 'journey' in request.resolver_match.url_name or request.resolver_match.namespace == 'account' and 'invitation' in request.resolver_match.url_name %}Mes démarches
+                    {% elif request.resolver_match.namespace == 'account' and 'access' in request.resolver_match.url_name %}Mes accès
+                    {% elif request.resolver_match.namespace == 'account' %}Mon compte
                     {% elif request.resolver_match.namespace == 'discovery' and request.resolver_match.url_name == 'for-you' %}Pour vous
                     {% elif request.resolver_match.namespace == 'discovery' and request.resolver_match.url_name == 'bookmarks' %}Favoris
                     {% elif request.resolver_match.namespace == 'discovery' and request.resolver_match.url_name == 'my-events' %}Mes événements
@@ -25,13 +28,14 @@
                     {% elif request.resolver_match.namespace == 'partners' %}Partenaires
                     {% elif request.resolver_match.namespace == 'analytics' %}Analytics
                     {% elif request.resolver_match.namespace == 'operations' %}Operations Center
+                    {% elif request.resolver_match.namespace == 'notifications' %}Notifications
                     {% else %}Vue d’ensemble{% endif %}
                 </h2>
             </div>
         </div>
 
         <div class="flex items-center gap-2">
-            <a href="{% url 'discovery:home' %}" class="mk-btn mk-btn-secondary hidden md:inline-flex" title="Rechercher un événement"><i data-lucide="search" class="h-4 w-4"></i><span>Rechercher</span></a>
+            <a href="{% url 'discovery:home' %}" class="mk-btn mk-btn-secondary hidden md:inline-flex" title="Découvrir"><i data-lucide="search" class="h-4 w-4"></i><span>Découvrir</span></a>
 
             {% if request.user.is_authenticated %}
             <a href="{% url 'notifications:list' %}" aria-label="Notifications" class="mk-icon-btn relative">
@@ -53,15 +57,13 @@
                     <i data-lucide="chevron-down" class="hidden h-3.5 w-3.5 sm:block" style="color:var(--mk-subtle)"></i>
                 </button>
                 <div x-cloak x-show="open" x-transition.origin.top.right role="menu" class="absolute right-0 mt-2 w-64 overflow-hidden rounded-2xl border p-2 shadow-2xl" style="background:var(--mk-surface-solid);border-color:var(--mk-border);box-shadow:var(--mk-shadow-float)">
-                    <div class="px-3 py-2.5">
-                        <p class="truncate text-sm font-bold" style="color:var(--mk-text)">{% if request.user.full_name %}{{ request.user.full_name }}{% else %}{{ request.user.username }}{% endif %}</p>
-                        <p class="mt-1 truncate text-[11px]" style="color:var(--mk-subtle)">{{ request.user.email }}</p>
-                    </div>
+                    <div class="px-3 py-2.5"><p class="truncate text-sm font-bold" style="color:var(--mk-text)">{% if request.user.full_name %}{{ request.user.full_name }}{% else %}{{ request.user.username }}{% endif %}</p><p class="mt-1 truncate text-[11px]" style="color:var(--mk-subtle)">{{ request.user.email }}</p></div>
                     <div class="my-1 border-t" style="border-color:var(--mk-border)"></div>
+                    <a href="{% url 'account:home' %}" class="mk-nav-item" role="menuitem"><i data-lucide="home"></i><span>Mon espace</span></a>
+                    <a href="{% url 'account:journey-list' %}" class="mk-nav-item" role="menuitem"><i data-lucide="route"></i><span>Mes démarches</span></a>
+                    <a href="{% url 'account:access-list' %}" class="mk-nav-item" role="menuitem"><i data-lucide="badge-check"></i><span>Mes accès</span></a>
                     <a href="{% url 'account:profile' %}" class="mk-nav-item" role="menuitem"><i data-lucide="user-round"></i><span>Mon profil</span></a>
-                    <a href="{% url 'tickets:list' %}" class="mk-nav-item" role="menuitem"><i data-lucide="ticket-check"></i><span>Mes billets</span></a>
-                    <a href="{% url 'discovery:for-you' %}" class="mk-nav-item" role="menuitem"><i data-lucide="sparkles"></i><span>Pour vous</span></a>
-                    {% if caps.has_organizer_tools %}<a href="{% url 'organizations:list' %}" class="mk-nav-item" role="menuitem"><i data-lucide="building-2"></i><span>Mes organisations</span></a>{% endif %}
+                    {% if caps.has_organizer_tools %}<a href="{% url 'core:dashboard' %}" class="mk-nav-item" role="menuitem"><i data-lucide="layout-dashboard"></i><span>Vue organisation</span></a>{% endif %}
                     <a href="{% url 'notifications:list' %}" class="mk-nav-item" role="menuitem"><i data-lucide="bell"></i><span>Notifications</span></a>
                     <form method="post" action="{% url 'core:logout' %}" class="mt-1">{% csrf_token %}<button class="mk-nav-item w-full text-left" type="submit" role="menuitem"><i data-lucide="log-out"></i><span>Se déconnecter</span></button></form>
                 </div>

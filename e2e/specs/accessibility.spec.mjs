@@ -20,13 +20,14 @@ test('public and account entry surfaces have no serious or critical axe violatio
 });
 
 
-test('participant dashboard profile and ticket pass axe gate', async ({ page }) => {
-  await login(page, 'visual.participant@e2e.makolo.test');
+test('participant home, Journey and Access surfaces pass axe gate', async ({ page }) => {
+  await login(page, 'participant@e2e.makolo.test');
   await audit(page, '/dashboard/');
+  await audit(page, '/account/');
   await audit(page, '/account/profile/');
-  await audit(page, '/discover/');
-  await audit(page, '/tickets/');
-  await page.getByRole('link', { name: /Invitation E2E/i }).first().click();
+  await audit(page, '/account/journeys/');
+  await audit(page, '/account/accesses/');
+  await page.getByText('Atelier citoyen Makolo E2E').first().click();
   await expectNoSeriousAxeViolations(page);
 });
 

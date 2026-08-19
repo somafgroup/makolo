@@ -1,47 +1,33 @@
 {% extends 'base/app.html' %}
 
-{% block title %}Payer {{ order.reference }} | Makolo{% endblock %}
+{% block title %}Paiement | Makolo{% endblock %}
 
 {% block content %}
 <div class="mx-auto max-w-3xl space-y-6">
-    <a href="{% url 'tickets:order-detail' order.pk %}" class="text-sm font-semibold text-indigo-600 dark:text-indigo-400">← Retour à la commande</a>
+    {% if participant_journey_url %}<a href="{{ participant_journey_url }}" class="mk-btn mk-btn-ghost"><i data-lucide="arrow-left" class="h-4 w-4"></i>Retour à ma démarche</a>{% else %}<a href="{% url 'tickets:order-detail' order.pk %}" class="mk-btn mk-btn-ghost"><i data-lucide="arrow-left" class="h-4 w-4"></i>Retour à la commande</a>{% endif %}
 
-    <div>
-        <p class="text-sm font-semibold uppercase tracking-[0.2em] text-indigo-600 dark:text-indigo-400">Paiement</p>
-        <h1 class="mt-2 text-4xl font-black tracking-tight">Régler {{ order.reference }}</h1>
-        <p class="mt-3 text-zinc-500 dark:text-zinc-400">Montant à régler : <strong>{{ order.total_amount }} {{ order.currency }}</strong>.</p>
-    </div>
+    <div><span class="mk-kicker">Paiement</span><h1 class="mk-page-title">Finaliser le paiement</h1><p class="mk-page-copy mt-3 text-[15px]">Montant à régler : <strong>{% if is_commerce_order %}{{ order.total }}{% else %}{{ order.total_amount }}{% endif %} {{ order.currency }}</strong>.</p></div>
 
-    <form method="post" class="space-y-6 rounded-3xl border border-zinc-200 bg-white p-7 dark:border-zinc-800 dark:bg-zinc-950">
+    <form method="post" class="mk-panel space-y-6 p-5 sm:p-7">
         {% csrf_token %}
         <input type="hidden" name="idempotency_key" value="{{ idempotency_key }}">
-
-        {% if form.non_field_errors %}<div class="rounded-2xl bg-red-50 p-4 text-red-700 dark:bg-red-950 dark:text-red-300">{{ form.non_field_errors }}</div>{% endif %}
+        {% if form.non_field_errors %}<div class="rounded-2xl border p-4 text-sm">{{ form.non_field_errors }}</div>{% endif %}
 
         <div class="grid gap-5 md:grid-cols-2">
             {% for field in form %}
-            <div class="{% if field.name == 'payer_phone' %}md:col-span-2{% endif %}">
-                <label class="mb-2 block text-sm font-bold">{{ field.label }}</label>
-                {{ field }}
-                {% if field.errors %}<p class="mt-2 text-sm text-red-600">{{ field.errors|join:", " }}</p>{% endif %}
-            </div>
+            <div class="{% if field.name == 'payer_phone' %}md:col-span-2{% endif %}"><label class="mb-2 block text-sm font-bold">{{ field.label }}</label>{{ field }}{% if field.errors %}<p class="mt-2 text-sm">{{ field.errors|join:", " }}</p>{% endif %}</div>
             {% endfor %}
         </div>
 
-        {% if not form.provider.field.choices %}
-        <div class="rounded-2xl bg-amber-50 p-4 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-200">Aucun fournisseur de paiement n’est actuellement disponible pour ce compte.</div>
-        {% else %}
-        <button class="inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-6 py-3 font-bold text-white hover:bg-indigo-500"><i data-lucide="credit-card" class="h-5 w-5"></i>Initialiser le paiement</button>
-        {% endif %}
+        {% if not form.provider.field.choices %}<div class="rounded-2xl border p-4 text-sm" style="border-color:var(--mk-border)">Aucun fournisseur de paiement en ligne n’est actuellement disponible.</div>{% else %}<button class="mk-btn mk-btn-primary w-full justify-center sm:w-auto"><i data-lucide="credit-card" class="h-5 w-5"></i>Initialiser le paiement</button>{% endif %}
     </form>
 
-    <p class="text-xs leading-5 text-zinc-400">Le fournisseur Sandbox Makolo sert uniquement aux tests de développement. Aucun numéro de carte ni secret bancaire n’est demandé ou stocké par Makolo.</p>
+    <p class="text-xs leading-5" style="color:var(--mk-subtle)">Le fournisseur Sandbox Makolo sert uniquement aux tests de développement. Aucun numéro de carte ni secret bancaire n’est demandé ou stocké par Makolo.</p>
 </div>
 {% endblock %}
 
 {% block extra_css %}
 <style>
-    select,input,textarea { width:100%; border-radius:1rem; border:1px solid rgb(212 212 216); background:transparent; padding:.85rem 1rem; }
-    .dark select,.dark input,.dark textarea { border-color:rgb(63 63 70); background:rgb(24 24 27); color:white; }
+    select,input,textarea { width:100%; border-radius:1rem; border:1px solid var(--mk-border); background:transparent; padding:.85rem 1rem; color:var(--mk-text); }
 </style>
 {% endblock %}
