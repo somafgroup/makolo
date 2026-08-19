@@ -1,5 +1,6 @@
 from django import forms
 from django.conf import settings
+from django.core.exceptions import ObjectDoesNotExist
 
 from events.permissions import user_can_manage_event
 
