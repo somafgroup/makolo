@@ -76,11 +76,7 @@ def primary_place(occurrence):
         if primary:
             return primary[0].place
         return prefetched[0].place if prefetched else None
-    link = (
-        occurrence.place_links.select_related("place")
-        .order_by("position", "role", "id")
-        .first()
-    )
+    link = occurrence.place_links.select_related("place").order_by("position", "role", "id").first()
     return link.place if link else None
 
 
@@ -132,8 +128,9 @@ def occurrence_presentation(*, activity, occurrence=None):
         "online_url": getattr(venue, "online_url", "") if venue else "",
         "venue_kind": getattr(venue, "kind", "") if venue else "",
         "is_past": bool(occurrence.end_at and occurrence.end_at <= now),
-        "is_ongoing": occurrence.start_at <= now
-        and (occurrence.end_at is None or occurrence.end_at > now),
+        "is_ongoing": occurrence.start_at <= now and (
+            occurrence.end_at is None or occurrence.end_at > now
+        ),
     }
 
 
@@ -201,10 +198,7 @@ def primary_access(journey):
         AccessStatus.EXPIRED: 6,
     }
     return (
-        sorted(
-            accesses,
-            key=lambda row: (priority.get(row.status, 9), -row.created_at.timestamp()),
-        )[0]
+        sorted(accesses, key=lambda row: (priority.get(row.status, 9), -row.created_at.timestamp()))[0]
         if accesses
         else None
     )
@@ -234,6 +228,14 @@ def payment_mode_label(order):
 
 
 def journey_status_label(journey):
+    if journey.workflow == WorkflowKind.INVITATION:
+        invitation_labels = {
+            JourneyStatus.APPROVED: "Invitation à accepter",
+            JourneyStatus.CONFIRMED: "Invitation acceptée",
+            JourneyStatus.CANCELLED: "Invitation refusée",
+        }
+        if journey.status in invitation_labels:
+            return invitation_labels[journey.status]
     order = primary_order(journey)
     if journey.status == JourneyStatus.PENDING_PAYMENT and order is not None:
         if order.payment_mode == PaymentMode.ON_SITE:
@@ -295,10 +297,7 @@ def next_participant_action(journey):
     access = primary_access(journey)
     order = primary_order(journey)
 
-    if journey.workflow == WorkflowKind.INVITATION and journey.status in {
-        JourneyStatus.DRAFT,
-        JourneyStatus.SUBMITTED,
-    }:
+    if journey.workflow == WorkflowKind.INVITATION and journey.status == JourneyStatus.APPROVED:
         return {
             "label": "Répondre à l’invitation",
             "url": detail_url,
@@ -380,12 +379,12 @@ def _timeline_label(journey, status):
     noun = journey_noun(journey)
     if journey.workflow == WorkflowKind.INVITATION:
         return {
-            JourneyStatus.DRAFT: "Invitation reçue",
-            JourneyStatus.SUBMITTED: "Invitation reçue",
-            JourneyStatus.PENDING_APPROVAL: "Réponse en cours",
-            JourneyStatus.APPROVED: "Invitation acceptée",
-            JourneyStatus.CONFIRMED: "Invitation confirmée",
-            JourneyStatus.FULFILLED: "Invitation terminée",
+            JourneyStatus.DRAFT: "Invitation créée",
+            JourneyStatus.SUBMITTED: "Invitation envoyée",
+            JourneyStatus.PENDING_APPROVAL: "Validation en attente",
+            JourneyStatus.APPROVED: "Invitation prête à accepter",
+            JourneyStatus.CONFIRMED: "Invitation acceptée",
+            JourneyStatus.FULFILLED: "Participation terminée",
             JourneyStatus.REJECTED: "Invitation refusée",
             JourneyStatus.CANCELLED: "Invitation refusée",
             JourneyStatus.EXPIRED: "Invitation expirée",
@@ -492,6 +491,9 @@ def journey_presentation(journey):
         "timeline": journey_timeline(journey),
         "detail_url": reverse("account:journey-detail", kwargs={"pk": journey.pk}),
         "is_event": event_for_activity(journey.activity) is not None,
+        "can_respond_invitation": bool(
+            journey.workflow == WorkflowKind.INVITATION and journey.status == JourneyStatus.APPROVED
+        ),
     }
 
 
